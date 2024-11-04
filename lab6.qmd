@@ -1,0 +1,180 @@
+---
+title: "Lab 6: Raster-vector interactions & False color imagery"
+format: html
+editor: visual
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r}
+library(sf)
+library(terra)
+library(tidyverse)
+library(tmap)
+library(spDataLarge)
+```
+
+```{r}
+# Load Zionn park boundary data
+boundary <- read_sf(system.file("vector/zion.gpkg", package = "spDataLarge"))
+
+elevation <- terra::rast(system.file("raster/srtm.tif",  package = "spDataLarge"))
+
+
+if(crs(elevation) == crs(boundary)){
+  print("CRS matches")
+} else{
+  boundary <- sf::st_transform(boundary, st_crs(elevation))
+}
+```
+
+```{r}
+if(sf::st_geometry_type(boundary) == "POLYGON") {
+  print("Polygon data")
+} else{
+  print("not polygon data")
+}
+```
+
+```{r}
+# Update park boundary object name to clarify that it's a polygon
+park_polygon <- boundary
+
+# Create line version of the park boundary
+park_border <- boundary %>%
+  sf::st_cast(., "MULTILINESTRING") # Takes original data set and turns it into just lines
+
+tm_shape(park_polygon) +
+  tm_polygons()
+
+tm_shape(park_border) +
+  tm_lines()
+```
+
+```{r}
+# Rasterize both the polygon and line representations of the park boundary
+polygon_raster <- terra::rasterize(park_polygon, elevation)
+border_raster <- terra::rasterize(park_border, elevation)
+
+tm_shape(polygon_raster) +
+  tm_raster()
+
+tm_shape(border_raster) +
+  tm_raster()
+```
+
+```{r}
+# Create a low spatial resolution template raster
+template_raster_low <- terra::rast(ext(park_polygon), 
+                                   resolution = 0.05,
+                                   crs = st_crs(park_polygon))
+
+# Create a high resolution template raster
+template_raster_high <- terra::rast(ext(park_polygon), 
+                                   resolution = 0.01,
+                                   crs = st_crs(park_polygon))
+
+# Rasterize to low resolution template raster
+polygon_raster_low <- terra:: rasterize(park_polygon,
+                                        template_raster_low)
+
+# Rasterize to high resolution template raster
+polygon_raster_high <- terra:: rasterize(park_polygon,
+                                        template_raster_high)
+```
+
+```{r}
+tm_shape(polygon_raster_high) +
+  tm_raster()
+
+tm_shape(polygon_raster_low) +
+  tm_raster()
+```
+
+## Rasterizing point data
+```{r}
+cycle_hire_osm <- spData::cycle_hire_osm
+
+cycle_hire_osm_projected <- st_transform(cycle_hire_osm, "EPSG:27700")
+
+template_raster <- terra::rast(ext(cycle_hire_osm_projected),
+                               resolution = 1000,
+                               crs = crs(cycle_hire_osm_projected))
+
+
+tm_shape(cycle_hire_osm_projected) +
+  tm_symbols()
+```
+
+```{r}
+# three versions of rasterization to produce the following:
+
+
+# raster representing the presence/absence of cycle hire points
+# raster representing the number of cycle hire points
+# raster representing the total capacity of cycle hire points
+
+ch_raster1 <- terra::rasterize(cycle_hire_osm_projected, template_raster)
+
+tm_shape(ch_raster1) +
+  tm_raster(title = "Presence/absence of cycle points")
+
+
+ch_raster2 <- terra::rasterize(cycle_hire_osm_projected,
+                               template_raster,
+                               fun = "length")
+tm_shape(ch_raster2) +
+  tm_raster(title = "Number of cycle hire points") +
+  tm_layout(legend.outside = TRUE,
+            main.title = "count of points")
+
+ch_raster3 <- rasterize(cycle_hire_osm_projected,
+                        template_raster,
+                        field = "capacity", # Capacity is an attribute in our vector data
+                        fun = sum, # We want to know total capacity
+                        na.rm = TRUE)
+
+tm_shape(ch_raster3) +
+  tm_raster(title = "Total capactiy of cycle hire points") +
+  tm_layout(legend.outside = TRUE,
+            main.title = "sum of capacity")
+```
+
+
+## False color imagery
+
+Landsat-7 bands:
+
+Band 	Wavelengths
+Band 1 	0.45 - 0.52 micrometers (blue)
+Band 2 	0.52 - 0.60 micrometers (green)
+Band 3 	0.63 - 0.69 micrometers (red)
+Band 4 	0.77 - 0.90 micrometers (near-infrared)
+Band 5 	1.55 - 1.75 micrometers (short-wave infrared)
+Band 7 	2.08 - 2.35 micrometers (mid-infrared)
+
+```{r}
+# Load Landsat image
+L7 <- terra::rast(system.file("tif/L7_ETMS.tif", package = "stars"))
+
+tm_shape(L7) +
+  tm_rgb(r = 3, g = 2, b = 1) +
+  tm_layout(main.title = "true color")
+
+
+tm_shape(L7) +
+  tm_rgb(r = 4, g = 3, b = 2) +
+  tm_layout(main.title = "NIR, red, green")
+
+tm_shape(L7) +
+  tm_rgb(r = 5, g = 4, b = 2) +
+  tm_layout(main.title = "SWIR, NIR, green")
+
+```
+
+
+
+
+
+
+
