@@ -1,0 +1,128 @@
+---
+title: "wk6_discussion"
+author: "Stephen Carroll"
+format: html
+editor: visual
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r}
+library(tidyverse)
+library(sf)
+library(terra)
+library(tmap)
+```
+
+```{r}
+# Set directory for folder
+pre_fire_dir <- here::here("data", "LC80340322016189-SC20170128091153")
+
+# Create a list of all images that have the extension .tif and contain the word band
+pre_fire_bands <- list.files(pre_fire_dir,
+                             pattern = glob2rx("*band*.tif$"),
+                             full.names = TRUE)
+# Create a raster stack
+pre_fire_rast <- rast(pre_fire_bands)
+
+# Read mask raster
+pre_mask <- rast(here::here("data", "LC80340322016189-SC20170128091153", "LC80340322016189LGN00_cfmask_crop.tif"))
+```
+
+```{r}
+# Set directory for folder
+post_fire_dir <- here::here("data", "LC80340322016205-SC20170127160728")
+
+# Create a list of all images that have the extension .tif and contain the word band
+post_fire_bands <- list.files(post_fire_dir,
+                             pattern = glob2rx("*band*.tif$"),
+                             full.names = TRUE)
+# Create a raster stack
+post_fire_rast <- rast(post_fire_bands)
+
+# Read mask raster
+post_mask <- rast(here::here("data", "LC80340322016189-SC20170128091153", "LC80340322016189LGN00_cfmask_crop.tif"))
+```
+
+```{r}
+nbr_fun <- function(nir, swir2){
+    (nir - swir2)/(nir + swir2)
+}
+```
+
+```{r}
+# Make a vector of EM band names
+bands <- c("Aerosol", "Blue", "Green", "Red", "NIR", "SWIR1", "SWIR2")
+
+# Rename the bands of the pre_fire and post_fire rasters
+names(pre_fire_rast) <- bands
+names(post_fire_rast) <- bands
+
+```
+
+
+```{r}
+# Mask out clouds and shadows with the pre_mask and post_mask rasters
+pre_mask[pre_mask > 0] <- NA
+post_mask[post_mask > 0] <- NA
+
+# Apply the mask to the raster data
+pre_fire_rast <- mask(pre_fire_rast, mask = pre_mask)
+post_fire_rast <- mask(post_fire_rast, mask = post_mask)
+```
+
+```{r}
+plot(pre_fire_rast, colNA = "white")
+```
+
+```{r}
+plot(post_fire_rast, colNA = "white")
+```
+
+```{r}
+# Plot a true color composite using plotRGB()
+# Map the red band to the red channel, green to green, and blue to blue
+plotRGB(pre_fire_rast,
+        r = 4,
+        g = 3, 
+        b = 2, 
+        stretch = "lin", # Apply a linear stretch
+        colNA = "black")
+```
+
+```{r}
+# Do the same for 'post'
+plotRGB(post_fire_rast, 
+        r = 4, 
+        g = 3, 
+        b = 2, 
+        stretch = "hist", # Apply a hist equalization
+        colNA = "black")
+```
+
+```{r}
+
+# apply NDVI function to post_fire_rast
+post_nbr_rast <- lapp(post_fire_rast[[c(5, 7)]], fun = nbr_fun)
+
+# apply NDVI function to pre_fire_rast
+pre_nbr_rast <- lapp(pre_fire_rast[[c(5, 7)]], fun = nbr_fun)
+
+
+dnbr<- pre_nbr_rast - post_nbr_rast
+
+
+pre_nbr_map <- tm_shape(pre_nbr_rast) +
+  tm_raster(title = "Pre NBR")
+
+post_nbr_map <- tm_shape(post_nbr_rast) +
+  tm_raster(title = "Post NBR")
+
+diff_nbr_map <- tm_shape(dnbr) +
+  tm_raster(title = "DNBR")
+
+tmap_arrange(pre_nbr_map, post_nbr_map, diff_nbr_map, ncol = 1)
+```
+
+
+
